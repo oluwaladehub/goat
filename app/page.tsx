@@ -36,8 +36,7 @@ export default function Home() {
       <main id="main">
         <section id="top" className="hero" data-scene aria-label="Introduction">
           <div className="hero-portrait" data-hero-art aria-hidden="true">
-            <Image className="hero-poster" src="/scenes/goat-poster.webp" alt="" fill preload sizes="100vw" />
-            <video className="hero-video" autoPlay muted loop playsInline preload="auto" poster="/scenes/goat-poster.webp">
+            <video className="hero-video" autoPlay muted loop playsInline preload="auto">
               <source src="/scenes/goat-mobile.mp4" type="video/mp4" media="(max-width: 650px)" />
               <source src="/scenes/goat.mp4" type="video/mp4" />
             </video>

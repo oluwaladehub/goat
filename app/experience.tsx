@@ -55,43 +55,72 @@ export function Experience({ children }: { children: ReactNode }) {
   useEffect(() => {
     const overlay = loader.current;
     const video = root.current?.querySelector<HTMLVideoElement>(".hero-video");
-    if (!overlay || !video || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!overlay || !video) return;
 
-    const percentage = overlay.querySelector("b");
-    const progress = { value: 0 };
-    let mounted = true;
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const lastSource = video.querySelector("source:last-child");
+    const percentage = overlay.querySelector("[data-load-percentage]");
     let dismissTimer: number | undefined;
-    const animation = gsap.timeline({ paused: true }).to(progress, {
-      value: 100, duration: 0.65, ease: "power1.out",
-      onUpdate: () => {
-        const value = Math.round(progress.value);
-        overlay.style.setProperty("--load-progress", value + "%");
-        if (percentage) percentage.textContent = String(value);
-      },
-    }).call(() => {
+    let dismissed = false;
+
+    function showProgress(value: number) {
+      if (!overlay || !percentage) return;
+      percentage.textContent = `${value}%`;
+      overlay.style.setProperty("--load-progress", `${value}%`);
+    }
+
+    function onProgress() {
+      if (dismissed || !Number.isFinite(video!.duration) || video!.duration <= 0) return;
+      const buffered = video!.buffered;
+      const bufferedFromStart = buffered.length && buffered.start(0) === 0 ? buffered.end(0) : 0;
+      showProgress(Math.min(99, Math.floor(bufferedFromStart / video!.duration * 100)));
+    }
+
+    function dismiss(immediately = false) {
+      if (dismissed || !overlay) return;
+      dismissed = true;
+      if (immediately) {
+        overlay.hidden = true;
+        return;
+      }
       overlay.classList.add("is-done");
       dismissTimer = window.setTimeout(() => { overlay.hidden = true; }, 650);
-    });
-    overlay.hidden = false;
-    const finish = () => { if (mounted) animation.play(); };
-    const onMediaReady = () => { void document.fonts.ready.then(finish); };
-    const fallback = window.setTimeout(finish, 2200);
+    }
 
-    if (video.readyState >= 2 || video.error) onMediaReady();
-    else {
-      video.addEventListener("loadeddata", onMediaReady, { once: true });
-      video.addEventListener("error", finish, { once: true });
+    const onMediaReady = () => {
+      showProgress(100);
+      dismiss();
+    };
+    const onMediaError = () => dismiss(true);
+    const onMotionChange = () => { if (reducedMotion.matches) dismiss(true); };
+    video.addEventListener("loadeddata", onMediaReady);
+    video.addEventListener("canplay", onMediaReady);
+    video.addEventListener("progress", onProgress);
+    video.addEventListener("loadedmetadata", onProgress);
+    video.addEventListener("error", onMediaError);
+    lastSource?.addEventListener("error", onMediaError);
+    reducedMotion.addEventListener("change", onMotionChange);
+
+    if (reducedMotion.matches || video.error || video.networkState === video.NETWORK_NO_SOURCE) {
+      dismiss(true);
+    } else if (video.readyState >= video.HAVE_CURRENT_DATA) {
+      onMediaReady();
+    } else {
+      onProgress();
     }
 
     return () => {
-      mounted = false;
-      window.clearTimeout(fallback);
       window.clearTimeout(dismissTimer);
       video.removeEventListener("loadeddata", onMediaReady);
-      video.removeEventListener("error", finish);
-      animation.kill();
-      overlay.hidden = true;
+      video.removeEventListener("canplay", onMediaReady);
+      video.removeEventListener("progress", onProgress);
+      video.removeEventListener("loadedmetadata", onProgress);
+      video.removeEventListener("error", onMediaError);
+      lastSource?.removeEventListener("error", onMediaError);
+      reducedMotion.removeEventListener("change", onMotionChange);
+      overlay.hidden = false;
       overlay.classList.remove("is-done");
+      showProgress(0);
     };
   }, []);
 
@@ -247,9 +276,10 @@ export function Experience({ children }: { children: ReactNode }) {
   return (
     <OpenProject.Provider value={setProject}>
       <div ref={root} data-active="top" className="portfolio">
-        <div className="opening-loader" ref={loader} role="status" hidden>
+        <noscript><style>{".opening-loader { display: none; }"}</style></noscript>
+        <div className="opening-loader" ref={loader} role="status" aria-label="Loading opening video">
           <div className="opening-loader-mark"><MagnetI /><MagnetI className="opening-loader-fill" /></div>
-          <p className="eyebrow">Loading <b aria-hidden="true">0</b></p>
+          <p className="eyebrow" data-load-percentage aria-hidden="true">0%</p>
         </div>
         <a href="#main" className="skip-link">Skip to content</a>
         <header className="header">
